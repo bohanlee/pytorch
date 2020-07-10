@@ -11,6 +11,7 @@
 #include <torch/csrc/autograd/function.h>
 #include <torch/csrc/autograd/variable.h>
 #include <torch/csrc/distributed/autograd/context/context.h>
+#include <torch/csrc/distributed/c10d/comm.h>
 
 namespace c10d {
 
@@ -52,6 +53,8 @@ class Reducer {
   std::vector<std::vector<int64_t>> get_backward_stats() const {
     return backward_stats_;
   }
+
+  void register_comm_hook(std::unique_ptr<CommHookInterface> iface);
 
  protected:
   // Forward declaration.
@@ -197,6 +200,9 @@ class Reducer {
     // Keep work handle around when this set of buckets is being reduced.
     std::shared_ptr<c10d::ProcessGroup::Work> work;
 
+    // Keep future work handle around if DDP comm hook is registered.
+    c10::intrusive_ptr<torch::jit::Future> future_work;
+
     // If this bucket should expect a single sparse gradient.
     // Implies: replicas[i].variables.size() == 1.
     bool expect_sparse_gradient = false;
@@ -239,6 +245,10 @@ class Reducer {
     void set(ContextPtr&& new_context_ptr);
   };
   RpcContext rpc_context_;
+
+ private:
+  // comm_hook_ is used to access the DDP communication hook if registered.
+  std::unique_ptr<CommHookInterface> comm_hook_;
 };
 
 std::vector<std::vector<size_t>> compute_bucket_assignment_by_size(
